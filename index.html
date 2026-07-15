@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>購物車測試</title>
+    <!-- 引入 LINE LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+    <h3>訂單測試表單</h3>
+    <div style="margin-bottom: 10px;">
+        <input type="text" id="product" placeholder="商品名稱">
+    </div>
+    <div style="margin-bottom: 10px;">
+        <input type="number" id="quantity" placeholder="數量">
+    </div>
+    <div style="margin-bottom: 10px;">
+        <input type="text" id="note" placeholder="備註">
+    </div>
+    <button onclick="sendOrder()">送出訂單</button>
+
+    <script>
+        // 初始化 LIFF
+        liff.init({ liffId: "2010718024-5LLzGr1V" })
+            .then(() => {
+                console.log("LIFF 初始化成功");
+            })
+            .catch((err) => {
+                console.error("LIFF 初始化失敗", err);
+            });
+
+        function sendOrder() {
+            if (!liff.isInClient()) {
+                alert('請在 LINE 聊天室內開啟此網頁，才能直接傳送訂單給官方帳號喔！');
+                return;
+            }
+
+            const product = document.getElementById('product').value;
+            const quantity = document.getElementById('quantity').value;
+            const note = document.getElementById('note').value;
+            
+            const orderText = `【新訂單送出】\n商品：${product}\n數量：${quantity}\n備註：${note}`;
+
+            // 讓客人的 LINE 帳號直接發送訊息給官方帳號
+            liff.sendMessages([
+                {
+                    type: 'text',
+                    text: orderText
+                }
+            ]).then(() => {
+                alert('訂單已成功傳送給官方帳號！');
+                liff.closeWindow(); // 成功後關閉 LIFF 視窗
+            }).catch((err) => {
+                console.error('發送失敗:', err);
+                alert('發送失敗，請確認是否已授權 chat_message.write 權限。');
+            });
+        }
+    </script>
+</body>
+</html>
