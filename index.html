@@ -104,7 +104,12 @@
             console.error("LIFF 初始化失敗", err);
         });
 
-    const DEFAULT_TOPPING_PRICES = { "珍珠": 5, "椰果": 5, "布丁": 10, "仙草凍": 10, "QQ": 10 };
+    // 預設加料分立 M 和 L 價格
+    const DEFAULT_TOPPING_PRICES = {
+        M: { "珍珠": 5, "椰果": 5, "布丁": 10, "仙草凍": 10, "QQ": 10 },
+        L: { "珍珠": 5, "椰果": 5, "布丁": 10, "仙草凍": 10, "QQ": 10 }
+    };
+    
     const DEFAULT_MENU_DATA = [
         { category: "茗品", items: [ { name: "烏龍綠茶", prices: { M: 25, L: 30 } }, { name: "特級綠茶", prices: { M: 25, L: 30 } }, { name: "烏龍菁茶", prices: { M: 25, L: 30 } }, { name: "錫蘭紅茶", prices: { M: 25, L: 30 } }, { name: "極品菁茶", prices: { M: 25, L: 30 } }, { name: "特選普洱", prices: { M: 25, L: 30 } }, { name: "嚴選高山茶", prices: { M: 25, L: 30 } } ] },
         { category: "冰淇淋/優多", items: [ { name: "冰淇淋紅茶", prices: { M: 45, L: 55 } }, { name: "冰淇淋奶茶", prices: { M: 50, L: 70 } }, { name: "紅茶三兄弟", prices: { L: 60 } }, { name: "紅心芭樂優多", prices: { L: 70 } }, { name: "優多百香果綠茶", prices: { L: 60 } }, { name: "優多綠茶", prices: { L: 50 } }, { name: "優多檸檬", prices: { L: 65 } }, { name: "蘆薈優多綠茶", prices: { L: 65 } } ] },
@@ -123,8 +128,20 @@
         try {
             const savedMenu = localStorage.getItem('pos_menu_custom');
             if (savedMenu) menuData = JSON.parse(savedMenu);
+            
             const savedToppings = localStorage.getItem('pos_toppings_custom');
-            if (savedToppings) toppingPrices = JSON.parse(savedToppings);
+            if (savedToppings) {
+                let parsed = JSON.parse(savedToppings);
+                // 兼容舊版的單一平面價格格式 (例如 {"珍珠": 5})，自動升級為 M / L 分立格式
+                if (parsed && !parsed.M && !parsed.L) {
+                    toppingPrices = {
+                        M: JSON.parse(JSON.stringify(parsed)),
+                        L: JSON.parse(JSON.stringify(parsed))
+                    };
+                } else {
+                    toppingPrices = parsed;
+                }
+            }
         } catch(e) { console.error("載入設定失敗", e); }
     }
     loadSavedConfig();
@@ -262,11 +279,11 @@
                 html += `
                 <div style="border-bottom:1px dashed #ccc; padding:10px 0;">
                     <div class="admin-row" style="margin-bottom:0; flex-wrap:wrap; gap:5px;">
-                        <div onclick="toggleItemToppings(${cIdx},${iIdx})" style="flex:1; font-weight:bold; color:#0288d1; cursor:pointer; text-decoration: underline; min-width: 130px;">
+                        <div onclick="toggleItemToppings(${cIdx}, ${iIdx})" style="flex:1; font-weight:bold; color:#0288d1; cursor:pointer; text-decoration: underline; min-width: 130px;">
                             🔗 ${item.name} <span style="font-size:0.85em; font-weight:normal; color:#e65100;">(加料)</span>
                         </div>
                         <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
-                            <select onchange="moveItem(${cIdx},${iIdx}, this)" style="padding:4px; max-width:90px; font-size:0.8em; border-radius:4px; border:1px solid #ccc; background:#fff;">
+                            <select onchange="moveItem(${cIdx}, ${iIdx}, this)" style="padding:4px; max-width:90px; font-size:0.8em; border-radius:4px; border:1px solid #ccc; background:#fff;">
                                 ${currentItemSelectHtml}
                             </select>
                             M $<input type="number" id="admin_m_${cIdx}_${iIdx}" class="admin-input" value="${m}">
@@ -347,54 +364,70 @@
         renderMenu();
     }
 
-    // ---- 全域加料管理功能 ----
+    // ---- 改進版：全域加料管理功能 (支援 M 與 L 杯分開) ----
     function renderGlobalToppingsAdmin() {
         let html = `<h3 style="margin-top:0;">🥤 全域加料價格設定</h3>`;
-        for(let t in toppingPrices) {
+        const sizes = ['M', 'L'];
+        
+        sizes.forEach(size => {
             html += `
-            <div class="admin-row">
-                <span style="font-weight:bold;">${t}</span> 
-                <div>
-                    $<input type="number" id="admin_top_${t}" class="admin-input" value="${toppingPrices[t]}" oninput="updateTempGlobalTopping('${t}', this.value)">
-                    <button onclick="deleteGlobalTopping('${t}')" style="background:#ff4d4d; color:white; border:none; border-radius:3px; padding:4px 8px; margin-left:5px; cursor:pointer; font-size:0.85em;">刪除</button>
+            <div style="background:#fff; border:1px solid #cfd8dc; border-radius:5px; padding:12px; margin-bottom:12px;">
+                <div style="font-weight:bold; color:#1565c0; margin-bottom:8px; border-bottom:1px solid #e0e0e0; padding-bottom:5px;">🥤 ${size} 杯全域加料</div>`;
+            
+            let sizeToppings = toppingPrices[size] || {};
+            for(let t in sizeToppings) {
+                html += `
+                <div class="admin-row">
+                    <span style="font-weight:bold;">${t}</span> 
+                    <div>
+                        $<input type="number" id="admin_top_${size}_${t}" class="admin-input" value="${sizeToppings[t]}" oninput="updateTempGlobalTopping('${size}', '${t}', this.value)">
+                        <button onclick="deleteGlobalTopping('${size}', '${t}')" style="background:#ff4d4d; color:white; border:none; border-radius:3px; padding:4px 8px; margin-left:5px; cursor:pointer; font-size:0.85em;">刪除</button>
+                    </div>
+                </div>`;
+            }
+            
+            html += `
+                <div style="margin-top:15px; padding:12px; background:#e3f2fd; border:1px dashed #64b5f6; border-radius:5px;">
+                    <div style="font-weight:bold; font-size:0.85em; margin-bottom:8px; color:#1565c0;">➕ 新增 ${size} 杯全域加料：</div>
+                    <div style="display:flex; gap:5px; align-items:center;">
+                        <input type="text" id="add_global_top_name_${size}" placeholder="名稱 (如:寒天)" style="flex:1; padding:6px; font-size:0.9em; border:1px solid #90caf9; border-radius:4px;">
+                        $<input type="number" id="add_global_top_price_${size}" placeholder="價格" style="width:60px; padding:6px; font-size:0.9em; border:1px solid #90caf9; border-radius:4px;">
+                        <button onclick="addGlobalTopping('${size}')" style="background:#1976d2; color:white; border:none; border-radius:4px; padding:6px 12px; font-size:0.9em; cursor:pointer; font-weight:bold;">新增</button>
+                    </div>
                 </div>
             </div>`;
-        }
-        html += `
-            <div style="margin-top:15px; padding:12px; background:#e3f2fd; border:1px dashed #64b5f6; border-radius:5px;">
-                <div style="font-weight:bold; font-size:0.85em; margin-bottom:8px; color:#1565c0;">➕ 新增全域加料：</div>
-                <div style="display:flex; gap:5px; align-items:center;">
-                    <input type="text" id="add_global_top_name" placeholder="名稱 (如:寒天)" style="flex:1; padding:6px; font-size:0.9em; border:1px solid #90caf9; border-radius:4px;">
-                    $<input type="number" id="add_global_top_price" placeholder="價格" style="width:60px; padding:6px; font-size:0.9em; border:1px solid #90caf9; border-radius:4px;">
-                    <button onclick="addGlobalTopping()" style="background:#1976d2; color:white; border:none; border-radius:4px; padding:6px 12px; font-size:0.9em; cursor:pointer; font-weight:bold;">新增</button>
-                </div>
-            </div>
-        `;
+        });
+        
         document.getElementById('global-toppings-container').innerHTML = html;
     }
 
-    function updateTempGlobalTopping(name, val) {
-        if(val !== '') toppingPrices[name] = parseInt(val);
+    function updateTempGlobalTopping(size, name, val) {
+        if(!toppingPrices[size]) toppingPrices[size] = {};
+        if(val !== '') toppingPrices[size][name] = parseInt(val);
     }
 
-    function deleteGlobalTopping(name) {
-        if(confirm(`確定要刪除全域加料「${name}」嗎？\n(注意：此動作會在按下「儲存所有修改」後正式生效)`)) {
-            delete toppingPrices[name];
+    function deleteGlobalTopping(size, name) {
+        if(confirm(`確定要刪除 ${size} 杯全域加料「${name}」嗎？\n(注意：此動作會在按下「儲存所有修改」後正式生效)`)) {
+            if(toppingPrices[size]) {
+                delete toppingPrices[size][name];
+            }
             renderGlobalToppingsAdmin();
         }
     }
 
-    function addGlobalTopping() {
-        const nameInput = document.getElementById('add_global_top_name');
-        const priceInput = document.getElementById('add_global_top_price');
+    function addGlobalTopping(size) {
+        const nameInput = document.getElementById(`add_global_top_name_${size}`);
+        const priceInput = document.getElementById(`add_global_top_price_${size}`);
         const name = nameInput.value.trim();
         const price = priceInput.value;
 
         if(!name) return alert("請輸入加料名稱");
         if(price === '') return alert("請輸入加料價格");
-        if(toppingPrices.hasOwnProperty(name)) return alert("此加料名稱已存在！");
+        
+        if(!toppingPrices[size]) toppingPrices[size] = {};
+        if(toppingPrices[size].hasOwnProperty(name)) return alert("此加料名稱已存在！");
 
-        toppingPrices[name] = parseInt(price);
+        toppingPrices[size][name] = parseInt(price);
         renderGlobalToppingsAdmin(); 
     }
 
@@ -480,7 +513,7 @@
             
             Object.keys(item.prices).forEach(size => {
                 if (!item.customToppings[size]) {
-                    item.customToppings[size] = JSON.parse(JSON.stringify(toppingPrices));
+                    item.customToppings[size] = JSON.parse(JSON.stringify(toppingPrices[size] || {}));
                 }
 
                 html += `<div style="background:#fff; border:1px solid #cfd8dc; border-radius:5px; padding:10px;">`;
@@ -491,8 +524,8 @@
                         <div class="admin-row" style="margin-bottom:4px; padding-left:5px;">
                             <span style="font-weight:bold;">👉 ${name}</span>
                             <div>
-                                $<input type="number" class="admin-input" style="width:50px; padding:3px;" value="${price}" oninput="updateCustomToppingPrice(${cIdx},${iIdx}, '${size}', '${name}', this.value)">
-                                <button onclick="deleteCustomTopping(${cIdx},${iIdx}, '${size}', '${name}')" style="background:#ff4d4d; color:white; border:none; border-radius:3px; padding:3px 8px; margin-left:5px; cursor:pointer;">刪除</button>
+                                $<input type="number" class="admin-input" style="width:50px; padding:3px;" value="${price}" oninput="updateCustomToppingPrice(${cIdx}, ${iIdx}, '${size}', '${name}', this.value)">
+                                <button onclick="deleteCustomTopping(${cIdx}, ${iIdx}, '${size}', '${name}')" style="background:#ff4d4d; color:white; border:none; border-radius:3px; padding:3px 8px; margin-left:5px; cursor:pointer;">刪除</button>
                             </div>
                         </div>
                     `;
@@ -522,7 +555,7 @@
         if (checked) {
             item.customToppings = {};
             Object.keys(item.prices).forEach(size => {
-                item.customToppings[size] = JSON.parse(JSON.stringify(toppingPrices));
+                item.customToppings[size] = JSON.parse(JSON.stringify(toppingPrices[size] || {}));
             });
         } else {
             delete item.customToppings;
@@ -584,10 +617,15 @@
     }
 
     function saveAdminDataSilent() {
-        for(let t in toppingPrices) {
-            let el = document.getElementById(`admin_top_${t}`);
-            if(el && el.value !== '') toppingPrices[t] = parseInt(el.value);
-        }
+        // 儲存全域 M 與 L 價格到臨時變數
+        const sizes = ['M', 'L'];
+        sizes.forEach(size => {
+            let sizeToppings = toppingPrices[size] || {};
+            for(let t in sizeToppings) {
+                let el = document.getElementById(`admin_top_${size}_${t}`);
+                if(el && el.value !== '') toppingPrices[size][t] = parseInt(el.value);
+            }
+        });
         
         menuData.forEach((cat, cIdx) => {
             cat.items.forEach((item, iIdx) => {
@@ -675,7 +713,7 @@
         const container = document.getElementById('topping-btns');
         container.innerHTML = '';
         
-        let activeToppings = toppingPrices; 
+        let activeToppings = toppingPrices[size] || {}; 
         if (item.customToppings && item.customToppings[size]) {
             activeToppings = item.customToppings[size]; 
         }
@@ -712,7 +750,7 @@
         
         let basePrice = currentSelect.item.prices[currentSelect.size];
         
-        let activeToppings = toppingPrices;
+        let activeToppings = toppingPrices[currentSelect.size] || {};
         if (currentSelect.item.customToppings && currentSelect.item.customToppings[currentSelect.size]) {
             activeToppings = currentSelect.item.customToppings[currentSelect.size];
         }
@@ -735,7 +773,8 @@
             cart.forEach((item, index) => {
                 total += item.price;
                 list.innerHTML += `<div class="cart-item">
-                    <div><strong>${item.item.name} (${item.size}) x${item.qty}</strong><br>${item.ice}/${item.sugar}${item.toppings.length ? '/加:'+item.toppings.join(',') : ''}</div>                     <div>$${item.price} <button class="cart-btn" onclick="removeFromCart(${index}); event.stopPropagation();">刪除</button></div>
+                    <div><strong>${item.item.name} (${item.size}) x${item.qty}</strong><br>${item.ice}/${item.sugar}${item.toppings.length ? '/加:'+item.toppings.join(',') : ''}</div>
+                    <div>$${item.price} <button class="cart-btn" onclick="removeFromCart(${index}); event.stopPropagation();">刪除</button></div>
                 </div>`;
             });
         } else {
