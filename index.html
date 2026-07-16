@@ -132,7 +132,6 @@
             const savedToppings = localStorage.getItem('pos_toppings_custom');
             if (savedToppings) {
                 let parsed = JSON.parse(savedToppings);
-                // 兼容舊版的單一平面價格格式，自動升級為 M / L 分立格式
                 if (parsed && !parsed.M && !parsed.L) {
                     toppingPrices = {
                         M: JSON.parse(JSON.stringify(parsed)),
@@ -168,7 +167,7 @@
         nav.innerHTML = '';
         
         menuData.forEach((cat, cIdx) => {
-            if(cat.items.length === 0) return; // 前台不顯示空分類
+            if(cat.items.length === 0) return;
             
             const btn = document.createElement('button');
             btn.className = 'nav-btn'; btn.innerText = cat.category;
@@ -234,7 +233,6 @@
                 </div>
             </div>
 
-            <!-- 新增大項分類管理 -->
             <div class="admin-section" style="background:#f3e5f5; border-color:#ce93d8;">
                 <h3 style="margin-top:0; color:#6a1b9a;">📂 飲品分類管理 (大項)</h3>
                 <div id="admin-category-list"></div>
@@ -301,7 +299,6 @@
         renderGlobalToppingsAdmin();
     }
 
-    // ---- 大項分類管理功能 ----
     function renderCategoryAdmin() {
         let html = '';
         menuData.forEach((cat, idx) => {
@@ -319,7 +316,6 @@
         let nameInput = document.getElementById('new_category_name');
         let name = nameInput.value.trim();
         if(!name) return alert('請輸入分類名稱！');
-        
         saveAdminDataSilent(); 
         menuData.push({ category: name, items: [] });
         saveAllToLocal();
@@ -348,27 +344,21 @@
     function moveItem(oldCIdx, iIdx, selectElement) {
         let newCIdx = parseInt(selectElement.value);
         if(oldCIdx === newCIdx) return;
-        
         if(!confirm("⚠️ 變更商品所屬分類，系統將會自動儲存您目前在後台的所有修改，確定要繼續嗎？")) {
             selectElement.value = oldCIdx; 
             return;
         }
-
         saveAdminDataSilent(); 
-        
         const itemToMove = menuData[oldCIdx].items.splice(iIdx, 1)[0];
         menuData[newCIdx].items.push(itemToMove);
-        
         saveAllToLocal();
         openAdminModal(); 
         renderMenu();
     }
 
-    // ---- 全域加料管理功能 ----
     function renderGlobalToppingsAdmin() {
         let html = `<h3 style="margin-top:0;">🥤 全域加料價格設定</h3>`;
         const sizes = ['M', 'L'];
-        
         sizes.forEach(size => {
             html += `
             <div style="background:#fff; border:1px solid #cfd8dc; border-radius:5px; padding:12px; margin-bottom:12px;">
@@ -385,7 +375,6 @@
                     </div>
                 </div>`;
             }
-            
             html += `
                 <div style="margin-top:15px; padding:12px; background:#e3f2fd; border:1px dashed #64b5f6; border-radius:5px;">
                     <div style="font-weight:bold; font-size:0.85em; margin-bottom:8px; color:#1565c0;">➕ 新增 ${size} 杯全域加料：</div>
@@ -397,7 +386,6 @@
                 </div>
             </div>`;
         });
-        
         document.getElementById('global-toppings-container').innerHTML = html;
     }
 
@@ -407,10 +395,8 @@
     }
 
     function deleteGlobalTopping(size, name) {
-        if(confirm(`確定要刪除 ${size} 杯全域加料「${name}」嗎？\n(注意：此動作會在按下「儲存所有修改」後正式生效)`)) {
-            if(toppingPrices[size]) {
-                delete toppingPrices[size][name];
-            }
+        if(confirm(`確定要刪除 ${size} 杯全域加料「${name}」嗎？`)) {
+            if(toppingPrices[size]) delete toppingPrices[size][name];
             renderGlobalToppingsAdmin();
         }
     }
@@ -420,13 +406,10 @@
         const priceInput = document.getElementById(`add_global_top_price_${size}`);
         const name = nameInput.value.trim();
         const price = priceInput.value;
-
-        if(!name) return alert("請輸入加料名稱");
-        if(price === '') return alert("請輸入加料價格");
+        if(!name || price === '') return alert("請完整輸入加料名稱與價格");
         
         if(!toppingPrices[size]) toppingPrices[size] = {};
-        if(toppingPrices[size].hasOwnProperty(name)) return alert("此加料名稱已存在！");
-
+        if(toppingPrices[size].hasOwnProperty(name)) return alert("名稱已存在！");
         toppingPrices[size][name] = parseInt(price);
         renderGlobalToppingsAdmin(); 
     }
@@ -450,41 +433,35 @@
             alert("📋 複製成功！現在可以到 LINE 直接貼上給其他員工了。");
         }).catch(err => {
             try { document.execCommand('copy'); alert("📋 複製成功！"); } 
-            catch(e) { alert("複製失敗，請手動長按輸入框中的文字進行全選複製。"); }
+            catch(e) { alert("複製失敗，請手動複製。"); }
         });
     }
 
     function importConfig() {
         const code = document.getElementById('sync_textarea').value.trim();
-        if (!code) return alert("請先在欄位中貼上其他手機傳來的「設定碼」！");
-        if (!confirm("⚠️ 注意！匯入會把這台手機原本的菜單、專屬加料等全部「覆蓋」！確定要繼續嗎？")) return;
+        if (!code) return alert("請先貼上「設定碼」！");
+        if (!confirm("⚠️ 注意！匯入會把這台手機原本的設定全部「覆蓋」！確定要繼續嗎？")) return;
         
         try {
             const jsonStr = decodeURIComponent(escape(atob(code)));
             const bundle = JSON.parse(jsonStr);
             if (!bundle.menu || !bundle.toppings) throw new Error("格式不完整");
-            
             localStorage.setItem('pos_menu_custom', JSON.stringify(bundle.menu));
             localStorage.setItem('pos_toppings_custom', JSON.stringify(bundle.toppings));
-            
             loadSavedConfig();
-            alert("✅ 匯入成功！設定已完美同步！");
+            alert("✅ 匯入成功！");
             openAdminModal();
             renderMenu();
-        } catch(e) { alert("❌ 匯入失敗！請確認代碼是否完整。"); }
+        } catch(e) { alert("❌ 匯入失敗！"); }
     }
 
     function toggleItemToppings(cIdx, iIdx) {
         const item = menuData[cIdx].items[iIdx];
-        
         if (item.customToppings && !item.customToppings.M && !item.customToppings.L) {
             let oldToppings = JSON.parse(JSON.stringify(item.customToppings));
             item.customToppings = {};
-            Object.keys(item.prices).forEach(size => {
-                item.customToppings[size] = JSON.parse(JSON.stringify(oldToppings));
-            });
+            Object.keys(item.prices).forEach(size => { item.customToppings[size] = JSON.parse(JSON.stringify(oldToppings)); });
         }
-
         const panel = document.getElementById(`admin_toppings_panel_${cIdx}_${iIdx}`);
         if (panel.style.display === 'block') {
             panel.style.display = 'none';
@@ -498,27 +475,19 @@
         const item = menuData[cIdx].items[iIdx];
         const panel = document.getElementById(`admin_toppings_panel_${cIdx}_${iIdx}`);
         let hasCustom = !!item.customToppings;
-        
         let html = `
             <div style="margin-bottom:8px;">
                 <label style="font-weight:bold; color:#1b5e20; cursor:pointer;">
                     <input type="checkbox" onchange="toggleCustomToppingsActive(${cIdx}, ${iIdx}, this.checked)" ${hasCustom ? 'checked' : ''}> 
-                    啟用「${item.name}」專屬加料種類與價格
+                    啟用「${item.name}」專屬加料
                 </label>
-            </div>
-        `;
-        
+            </div>`;
         if (hasCustom) {
             html += `<div style="border-top:1px solid #b0bec5; padding-top:8px; display:flex; flex-direction:column; gap:10px;">`;
-            
             Object.keys(item.prices).forEach(size => {
-                if (!item.customToppings[size]) {
-                    item.customToppings[size] = JSON.parse(JSON.stringify(toppingPrices[size] || {}));
-                }
-
+                if (!item.customToppings[size]) item.customToppings[size] = JSON.parse(JSON.stringify(toppingPrices[size] || {}));
                 html += `<div style="background:#fff; border:1px solid #cfd8dc; border-radius:5px; padding:10px;">`;
                 html += `<div style="font-weight:bold; color:#1565c0; margin-bottom:8px; border-bottom:1px solid #e0e0e0; padding-bottom:5px;">🥤 ${size} 杯專屬加料</div>`;
-                
                 Object.entries(item.customToppings[size]).forEach(([name, price]) => {
                     html += `
                         <div class="admin-row" style="margin-bottom:4px; padding-left:5px;">
@@ -527,26 +496,20 @@
                                 $<input type="number" class="admin-input" style="width:50px; padding:3px;" value="${price}" oninput="updateCustomToppingPrice(${cIdx}, ${iIdx}, '${size}', '${name}', this.value)">
                                 <button onclick="deleteCustomTopping(${cIdx}, ${iIdx}, '${size}', '${name}')" style="background:#ff4d4d; color:white; border:none; border-radius:3px; padding:3px 8px; margin-left:5px; cursor:pointer;">刪除</button>
                             </div>
-                        </div>
-                    `;
+                        </div>`;
                 });
-                
                 html += `
                     <div style="margin-top:10px; padding:8px; background:#f5f5f5; border:1px dashed #b0bec5; border-radius:4px;">
-                        <div style="font-weight:bold; font-size:0.8em; margin-bottom:5px; color:#555;">新增 ${size} 杯專屬配料：</div>
+                        <div style="font-weight:bold; font-size:0.8em; margin-bottom:5px; color:#555;">新增配料：</div>
                         <div style="display:flex; gap:5px; align-items:center;">
-                            <input type="text" id="add_top_name_${cIdx}_${iIdx}_${size}" placeholder="料名(如:茶凍)" style="width:90px; padding:4px; font-size:0.9em;">
+                            <input type="text" id="add_top_name_${cIdx}_${iIdx}_${size}" placeholder="料名" style="width:90px; padding:4px; font-size:0.9em;">
                             $<input type="number" id="add_top_price_${cIdx}_${iIdx}_${size}" placeholder="加價" style="width:50px; padding:4px; font-size:0.9em;">
                             <button onclick="addCustomTopping(${cIdx}, ${iIdx}, '${size}')" style="background:#06C755; color:white; border:none; border-radius:3px; padding:4px 8px; font-size:0.9em; cursor:pointer; font-weight:bold;">新增</button>
                         </div>
-                    </div>
-                </div>`;
+                    </div></div>`;
             });
             html += `</div>`;
-        } else {
-            html += `<div style="color:#666; font-size:0.85em; line-height:1.4;">💡 目前本商品套用「全域加料價格」設定。勾選上方核取方塊可自訂此杯飲料 (依 M/L 杯) 限定的配料及獨立售價。</div>`;
         }
-        
         panel.innerHTML = html;
     }
 
@@ -554,20 +517,14 @@
         const item = menuData[cIdx].items[iIdx];
         if (checked) {
             item.customToppings = {};
-            Object.keys(item.prices).forEach(size => {
-                item.customToppings[size] = JSON.parse(JSON.stringify(toppingPrices[size] || {}));
-            });
-        } else {
-            delete item.customToppings;
-        }
+            Object.keys(item.prices).forEach(size => { item.customToppings[size] = JSON.parse(JSON.stringify(toppingPrices[size] || {})); });
+        } else { delete item.customToppings; }
         renderItemToppingsConfig(cIdx, iIdx);
     }
 
     function updateCustomToppingPrice(cIdx, iIdx, size, name, val) {
         const item = menuData[cIdx].items[iIdx];
-        if (item.customToppings && item.customToppings[size] && val !== '') {
-            item.customToppings[size][name] = parseInt(val);
-        }
+        if (item.customToppings && item.customToppings[size] && val !== '') item.customToppings[size][name] = parseInt(val);
     }
 
     function deleteCustomTopping(cIdx, iIdx, size, name) {
@@ -580,19 +537,12 @@
 
     function addCustomTopping(cIdx, iIdx, size) {
         const item = menuData[cIdx].items[iIdx];
-        const nameInput = document.getElementById(`add_top_name_${cIdx}_${iIdx}_${size}`);
-        const priceInput = document.getElementById(`add_top_price_${cIdx}_${iIdx}_${size}`);
-        
-        const name = nameInput.value.trim();
-        const priceStr = priceInput.value;
-        
-        if (!name) return alert("請輸入加料名稱");
-        if (priceStr === '') return alert("請輸入價格");
-        
+        const name = document.getElementById(`add_top_name_${cIdx}_${iIdx}_${size}`).value.trim();
+        const priceStr = document.getElementById(`add_top_price_${cIdx}_${iIdx}_${size}`).value;
+        if (!name || priceStr === '') return alert("請完整輸入");
         if (!item.customToppings) item.customToppings = {};
         if (!item.customToppings[size]) item.customToppings[size] = {};
         item.customToppings[size][name] = parseInt(priceStr);
-        
         renderItemToppingsConfig(cIdx, iIdx);
     }
 
@@ -601,23 +551,18 @@
         let name = document.getElementById('new_name').value;
         let mStr = document.getElementById('new_m').value;
         let lStr = document.getElementById('new_l').value;
-        
-        if(!name) return alert("請輸入名稱");
-        if(!mStr && !lStr) return alert("請至少輸入一個價格 (M 或 L)");
-        
+        if(!name || (!mStr && !lStr)) return alert("請輸入名稱與至少一個價格");
         let prices = {};
         if(mStr) prices.M = parseInt(mStr);
         if(lStr) prices.L = parseInt(lStr);
-        
         saveAdminDataSilent();
         menuData[cIdx].items.push({ name: name, prices: prices });
         saveAllToLocal();
         openAdminModal(); 
-        alert(`「${name}」已成功新增！`);
+        alert(`「${name}」已新增！`);
     }
 
     function saveAdminDataSilent() {
-        // 儲存全域 M 與 L 價格到臨時變數
         const sizes = ['M', 'L'];
         sizes.forEach(size => {
             let sizeToppings = toppingPrices[size] || {};
@@ -626,12 +571,10 @@
                 if(el && el.value !== '') toppingPrices[size][t] = parseInt(el.value);
             }
         });
-        
         menuData.forEach((cat, cIdx) => {
             cat.items.forEach((item, iIdx) => {
                 let mInput = document.getElementById(`admin_m_${cIdx}_${iIdx}`);
                 let lInput = document.getElementById(`admin_l_${cIdx}_${iIdx}`);
-                
                 if (mInput && lInput) {
                     item.prices = {};
                     if(mInput.value !== '') item.prices.M = parseInt(mInput.value);
@@ -650,7 +593,7 @@
         saveAdminDataSilent();
         saveAllToLocal();
         document.getElementById('admin-modal').style.display = 'none';
-        alert("✅ 所有修改已成功儲存並生效！");
+        alert("✅ 修改已成功儲存！");
         renderMenu(); 
     }
 
@@ -660,7 +603,6 @@
         renderMenu();
     }
 
-    // ============ 前台點餐流程 ============
     function openModal(item, cIdx, iIdx) {
         let defaultSize = item.prices.hasOwnProperty('L') ? 'L' : Object.keys(item.prices)[0];
         if(!defaultSize) return alert("此品項目前沒有設定價格"); 
@@ -674,7 +616,6 @@
         currentSelect = { item, qty: 1, size: defaultSize, ice: null, sugar: null, toppings: [] };
         document.getElementById('custom-sugar').style.display = 'none';
         document.getElementById('custom-sugar').value = '';
-        
         document.getElementById('modal-title').innerText = item.name;
         document.getElementById('item-qty').innerText = 1;
         document.getElementById('option-modal').style.display = 'flex';
@@ -713,11 +654,8 @@
     function renderToppings(item, size) {
         const container = document.getElementById('topping-btns');
         container.innerHTML = '';
-        
         let activeToppings = toppingPrices[size] || {}; 
-        if (item.customToppings && item.customToppings[size]) {
-            activeToppings = item.customToppings[size]; 
-        }
+        if (item.customToppings && item.customToppings[size]) activeToppings = item.customToppings[size]; 
         
         Object.entries(activeToppings).forEach(([name, price]) => {
             const btn = document.createElement('button');
@@ -750,12 +688,10 @@
         }
         
         let basePrice = currentSelect.item.prices[currentSelect.size];
-        
         let activeToppings = toppingPrices[currentSelect.size] || {};
         if (currentSelect.item.customToppings && currentSelect.item.customToppings[currentSelect.size]) {
             activeToppings = currentSelect.item.customToppings[currentSelect.size];
         }
-
         let toppingCost = currentSelect.toppings.reduce((sum, t) => sum + (activeToppings[t] || 0), 0);
         let finalPrice = (basePrice + toppingCost) * currentSelect.qty;
         
@@ -768,7 +704,6 @@
         const cartModal = document.getElementById('cart-modal');
         const list = document.getElementById('cart-list');
         list.innerHTML = '';
-        
         let total = 0;
         if(cart.length > 0) {
             cart.forEach((item, index) => {
@@ -778,9 +713,7 @@
                     <div>$${item.price} <button class="cart-btn" onclick="removeFromCart(${index}); event.stopPropagation();">刪除</button></div>
                 </div>`;
             });
-        } else {
-            list.innerHTML = '<div style="text-align:center; padding:20px;">購物車目前是空的</div>';
-        }
+        } else { list.innerHTML = '<div style="text-align:center; padding:20px;">購物車目前是空的</div>'; }
         
         document.getElementById('cart-total').innerText = total;
         cartModal.style.display = 'flex';
@@ -792,7 +725,7 @@
         showCart();
     }
 
-    // ============ 送出精美 Flex Message 訂單 ============
+    // --- 全新改版的 Flex Message 發送邏輯 ---
     function sendToLine() {
         if(cart.length === 0) return alert("購物車是空的");
 
@@ -804,93 +737,87 @@
         let note = document.getElementById('order-note').value;
         let total = cart.reduce((sum, i) => sum + i.price, 0);
 
-        // 建立精美的 Flex 項目明細
-        let contents = [];
-        cart.forEach(i => {
-            // 商品名稱與價格
-            contents.push({
-                type: "box",
-                layout: "baseline",
+        // 1. 組裝每項餐點的 Flex 內容（包含冰塊、甜度、加料）
+        let flexContents = cart.map(i => {
+            let details = `👉 ${i.ice} / ${i.sugar}`;
+            if(i.toppings && i.toppings.length > 0) {
+                details += ` / 加:${i.toppings.join(',')}`;
+            }
+
+            return {
+                type: "box", layout: "vertical", margin: "sm",
                 contents: [
-                    { type: "text", text: `🍵 ${i.item.name} (${i.size})`, size: "sm", weight: "bold", flex: 3 },
-                    { type: "text", text: `x${i.qty}`, size: "sm", color: "#888888", flex: 1 },
-                    { type: "text", text: `$${i.price}`, size: "sm", align: "end", color: "#333333", flex: 2 }
+                    {
+                        type: "box", layout: "baseline",
+                        contents: [
+                            { type: "text", text: `${i.item.name}(${i.size}) x${i.qty}`, size: "sm", weight: "bold", flex: 3, wrap: true },
+                            { type: "text", text: `$${i.price}`, size: "sm", align: "end", flex: 1, weight: "bold" }
+                        ]
+                    },
+                    {
+                        type: "box", layout: "baseline", margin: "xs",
+                        contents: [
+                            { type: "text", text: details, size: "xs", color: "#888888", flex: 1, wrap: true }
+                        ]
+                    }
                 ]
-            });
-            // 冰塊、甜度、加料標籤 (小字)
-            let desc = `${i.ice} / ${i.sugar}`;
-            if(i.toppings.length) desc += ` / 加: ${i.toppings.join(', ')}`;
-            contents.push({
-                type: "text",
-                text: desc,
-                size: "xs",
-                color: "#777777",
-                margin: "xs",
-                style: "italic",
-                wrap: true
-            });
-            // 間距
-            contents.push({ type: "spacer", size: "sm" });
+            };
         });
 
-        // 如果有備註
-        if (note) {
-            contents.push({ type: "separator", margin: "md" });
-            contents.push({
-                type: "text",
-                text: `✍️ 備註：\n${note}`,
-                size: "xs",
-                color: "#555555",
-                margin: "md",
-                wrap: true
-            });
+        // 2. 組裝備註的 Flex 內容（如果有填寫的話才會顯示）
+        let noteBox = [];
+        if (note && note.trim() !== "") {
+            noteBox = [
+                { type: "separator", margin: "md", color: "#dddddd" },
+                {
+                    type: "box", layout: "vertical", margin: "md",
+                    contents: [
+                        { type: "text", text: "📝 備註事項：", size: "sm", weight: "bold", color: "#e65100" },
+                        { type: "text", text: note, size: "sm", wrap: true, color: "#666666", margin: "sm" }
+                    ]
+                }
+            ];
         }
 
+        // 3. 完整的 Flex Message 結構
         const flexMessage = {
             type: "flex",
             altText: "🎉 收到新訂單！",
             contents: {
                 type: "bubble",
-                header: {
-                    type: "box",
-                    layout: "vertical",
-                    contents: [{ type: "text", text: "📋 員工 POS 點餐系統", weight: "bold", size: "md", color: "#06C755" }]
-                },
+                size: "mega",
                 body: {
-                    type: "box",
-                    layout: "vertical",
+                    type: "box", layout: "vertical",
                     contents: [
-                        { type: "text", text: "訂單明細", weight: "bold", size: "lg", color: "#111111" },
-                        { type: "separator", margin: "md" },
-                        { type: "box", layout: "vertical", margin: "md", spacing: "xs", contents: contents }
-                    ]
-                },
-                footer: {
-                    type: "box",
-                    layout: "vertical",
-                    contents: [
-                        { type: "separator", margin: "md" },
-                        { type: "box", layout: "baseline", margin: "md", contents: [
-                            { type: "text", text: "總計金額", flex: 1, size: "md", weight: "bold" },
-                            { type: "text", text: `$${total}`, weight: "bold", size: "xl", align: "end", color: "#d32f2f" }
-                        ]}
+                        { type: "text", text: "📋 新訂單明細", weight: "bold", size: "lg", color: "#06C755" },
+                        { type: "separator", margin: "md", color: "#06C755" },
+                        { type: "box", layout: "vertical", margin: "md", contents: flexContents },
+                        ...noteBox, // 動態插入備註區塊
+                        { type: "separator", margin: "md", color: "#dddddd" },
+                        {
+                            type: "box", layout: "baseline", margin: "md",
+                            contents: [
+                                { type: "text", text: "💰 總計", weight: "bold", size: "md" },
+                                { type: "text", text: `$${total}`, weight: "bold", size: "xl", align: "end", color: "#ff4d4d" }
+                            ]
+                        }
                     ]
                 }
             }
         };
 
+        // 發送訊息
         liff.sendMessages([flexMessage])
-            .then(() => {
-                alert("訂單已成功傳送！");
-                cart = []; 
-                updateCounter(); 
-                document.getElementById('cart-modal').style.display = 'none';
-                liff.closeWindow();
-            })
-            .catch((err) => {
-                console.error('發送失敗:', err);
-                alert('傳送失敗，請確認 LIFF 後台是否已授權 chat_message.write 權限。');
-            });
+        .then(() => {
+            alert("訂單已成功傳送！");
+            cart = []; 
+            updateCounter(); 
+            document.getElementById('cart-modal').style.display = 'none';
+            liff.closeWindow(); 
+        }).catch((err) => {
+            console.error('發送失敗:', err);
+            alert('傳送失敗：' + JSON.stringify(err));
+        });
     }
 
     renderMenu();
