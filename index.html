@@ -725,7 +725,7 @@
         showCart();
     }
 
-    // --- 全新改版的 Flex Message 發送邏輯 ---
+    // --- 全新改版的 Carousel (輪播卡片) 傳送邏輯 ---
     function sendToLine() {
         if(cart.length === 0) return alert("購物車是空的");
 
@@ -737,8 +737,8 @@
         let note = document.getElementById('order-note').value;
         let total = cart.reduce((sum, i) => sum + i.price, 0);
 
-        // 1. 組裝每項餐點的 Flex 內容（包含冰塊、甜度、加料）
-        let flexContents = cart.map(i => {
+        // 1. 將所有餐點轉為 Flex Box 格式
+        let allItemBoxes = cart.map(i => {
             let details = `👉 ${i.ice} / ${i.sugar}`;
             if(i.toppings && i.toppings.length > 0) {
                 details += ` / 加:${i.toppings.join(',')}`;
@@ -764,49 +764,67 @@
             };
         });
 
-        // 2. 組裝備註的 Flex 內容（如果有填寫的話才會顯示）
-        let noteBox = [];
+        // 2. 備註與總計的 Flex 區塊
+        let footerBox = [];
         if (note && note.trim() !== "") {
-            noteBox = [
-                { type: "separator", margin: "md", color: "#dddddd" },
-                {
-                    type: "box", layout: "vertical", margin: "md",
-                    contents: [
-                        { type: "text", text: "📝 備註事項：", size: "sm", weight: "bold", color: "#e65100" },
-                        { type: "text", text: note, size: "sm", wrap: true, color: "#666666", margin: "sm" }
-                    ]
-                }
-            ];
+            footerBox.push({ type: "separator", margin: "md", color: "#dddddd" });
+            footerBox.push({
+                type: "box", layout: "vertical", margin: "md",
+                contents: [
+                    { type: "text", text: "📝 備註事項：", size: "sm", weight: "bold", color: "#e65100" },
+                    { type: "text", text: note, size: "sm", wrap: true, color: "#666666", margin: "sm" }
+                ]
+            });
         }
+        footerBox.push({ type: "separator", margin: "md", color: "#dddddd" });
+        footerBox.push({
+            type: "box", layout: "baseline", margin: "md",
+            contents: [
+                { type: "text", text: "💰 總計", weight: "bold", size: "md" },
+                { type: "text", text: `$${total}`, weight: "bold", size: "xl", align: "end", color: "#ff4d4d" }
+            ]
+        });
 
-        // 3. 完整的 Flex Message 結構
-        const flexMessage = {
-            type: "flex",
-            altText: "🎉 收到新訂單！",
-            contents: {
+        // 3. 核心邏輯：切割陣列，製作輪播卡片 (Carousel)
+        const ITEMS_PER_BUBBLE = 10; // 每 10 個餐點切成一張卡片
+        let bubbles = [];
+
+        for (let i = 0; i < allItemBoxes.length; i += ITEMS_PER_BUBBLE) {
+            let chunk = allItemBoxes.slice(i, i + ITEMS_PER_BUBBLE);
+            let isLastBubble = (i + ITEMS_PER_BUBBLE >= allItemBoxes.length);
+
+            let bubbleContents = [
+                { type: "text", text: `📋 新訂單明細 (${Math.floor(i/ITEMS_PER_BUBBLE) + 1})`, weight: "bold", size: "lg", color: "#06C755" },
+                { type: "separator", margin: "md", color: "#06C755" },
+                { type: "box", layout: "vertical", margin: "md", contents: chunk }
+            ];
+
+            // 只有最後一張卡片才加入「備註」與「總計」
+            if (isLastBubble) {
+                bubbleContents.push(...footerBox);
+            }
+
+            bubbles.push({
                 type: "bubble",
                 size: "mega",
                 body: {
                     type: "box", layout: "vertical",
-                    contents: [
-                        { type: "text", text: "📋 新訂單明細", weight: "bold", size: "lg", color: "#06C755" },
-                        { type: "separator", margin: "md", color: "#06C755" },
-                        { type: "box", layout: "vertical", margin: "md", contents: flexContents },
-                        ...noteBox, // 動態插入備註區塊
-                        { type: "separator", margin: "md", color: "#dddddd" },
-                        {
-                            type: "box", layout: "baseline", margin: "md",
-                            contents: [
-                                { type: "text", text: "💰 總計", weight: "bold", size: "md" },
-                                { type: "text", text: `$${total}`, weight: "bold", size: "xl", align: "end", color: "#ff4d4d" }
-                            ]
-                        }
-                    ]
+                    contents: bubbleContents
                 }
+            });
+        }
+
+        // 4. 發送 Carousel 格式的 Flex Message
+        const flexMessage = {
+            type: "flex",
+            altText: `🎉 收到新訂單！總計 $${total}`,
+            contents: {
+                type: "carousel",
+                contents: bubbles
             }
         };
 
-        // 發送訊息
+        // 呼叫 LIFF 傳送
         liff.sendMessages([flexMessage])
         .then(() => {
             alert("訂單已成功傳送！");
