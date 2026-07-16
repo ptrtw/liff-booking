@@ -87,22 +87,15 @@
     <div class="modal-content" style="height: 95vh; display: flex; flex-direction: column;">
         <h2 style="margin-top:0; color:#d32f2f;">⚙️ 後台管理系統</h2>
         <div id="admin-content" style="flex-grow:1; overflow-y:auto; padding-right:5px;"></div>
-        <button onclick="saveAdminData()" style="width:100%; padding:15px; background:#d32f2f; color:white; border:none; border-radius:8px; font-weight:bold; margin-top:15px;">💾 儲存所有修改</button>
+        <button onclick="saveAdminData()" style="width:100%; padding:15px; background:#d32f2f; color:white; border:none; border-radius:8px; font-weight:bold; margin-top:15px;">💾 儲存並同步至雲端</button>
         <button onclick="closeAdminModal()" style="width:100%; padding:10px; background:none; border:none; color:#666; margin-top:10px;">取消離開</button>
     </div>
 </div>
 
 <script>
-    // 2. 初始化 LIFF 設定
-    const LIFF_ID = "2010718024-5LLzGr1V"; // 您的 LIFF ID
-    
-    liff.init({ liffId: LIFF_ID })
-        .then(() => {
-            console.log("LIFF 初始化成功");
-        })
-        .catch((err) => {
-            console.error("LIFF 初始化失敗", err);
-        });
+    // 2. 初始化 LIFF 與 GAS 雲端設定
+    const LIFF_ID = "2010718024-5LLzGr1V"; 
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwxTS2OpGknXd9MjMjrkINktu3nY6PKEv8cfjdwwTyZQPKfVVPVf0N7BIfJtS1bvVNRuQ/exec";
 
     // 預設加料分立 M 和 L 價格
     const DEFAULT_TOPPING_PRICES = {
@@ -124,6 +117,7 @@
     let toppingPrices = JSON.parse(JSON.stringify(DEFAULT_TOPPING_PRICES));
     let menuData = JSON.parse(JSON.stringify(DEFAULT_MENU_DATA));
 
+    // 先從本地載入避免畫面空白
     function loadSavedConfig() {
         try {
             const savedMenu = localStorage.getItem('pos_menu_custom');
@@ -144,6 +138,34 @@
         } catch(e) { console.error("載入設定失敗", e); }
     }
     loadSavedConfig();
+
+    // 向 GAS 雲端獲取最新資料
+    function loadCloudConfig() {
+        fetch(GAS_API_URL)
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.menu && data.menu.length > 0) {
+                    menuData = data.menu;
+                    if(data.toppings) toppingPrices = data.toppings;
+                    saveAllToLocal(); // 更新本地快取
+                    renderMenu();     // 重新渲染雲端菜單
+                    console.log("✅ 雲端菜單同步完成");
+                }
+            })
+            .catch(err => {
+                console.error("❌ 無法連線至雲端，使用本地資料", err);
+            });
+    }
+
+    liff.init({ liffId: LIFF_ID })
+        .then(() => {
+            console.log("LIFF 初始化成功");
+            loadCloudConfig(); // 啟動雲端同步
+        })
+        .catch((err) => {
+            console.error("LIFF 初始化失敗", err);
+            loadCloudConfig(); // 就算 LIFF 失敗也嘗試抓雲端資料
+        });
 
     let cart = [];
     try {
@@ -589,12 +611,31 @@
         localStorage.setItem('pos_toppings_custom', JSON.stringify(toppingPrices));
     }
 
+    // 修改版：發送儲存資料至 GAS
     function saveAdminData() {
         saveAdminDataSilent();
         saveAllToLocal();
+        
+        const bundle = { menu: menuData, toppings: toppingPrices };
+        
         document.getElementById('admin-modal').style.display = 'none';
-        alert("✅ 修改已成功儲存！");
-        renderMenu(); 
+        alert("⏳ 正在將修改同步至雲端，請稍候...");
+
+        fetch(GAS_API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(bundle)
+        })
+        .then(res => res.json())
+        .then(result => {
+            alert("✅ 雲端儲存成功！所有員工下次開啟將自動套用新菜單。");
+            renderMenu(); 
+        })
+        .catch(err => {
+            console.error(err);
+            alert("⚠️ 雲端同步失敗，但已儲存於您的設備中。");
+            renderMenu();
+        });
     }
 
     function closeAdminModal() {
@@ -725,7 +766,6 @@
         showCart();
     }
 
-    // --- 全新改版的 Carousel (輪播卡片) 傳送邏輯 ---
     function sendToLine() {
         if(cart.length === 0) return alert("購物車是空的");
 
@@ -737,7 +777,6 @@
         let note = document.getElementById('order-note').value;
         let total = cart.reduce((sum, i) => sum + i.price, 0);
 
-        // 1. 將所有餐點轉為 Flex Box 格式
         let allItemBoxes = cart.map(i => {
             let details = `👉 ${i.ice} / ${i.sugar}`;
             if(i.toppings && i.toppings.length > 0) {
@@ -764,7 +803,6 @@
             };
         });
 
-        // 2. 備註與總計的 Flex 區塊
         let footerBox = [];
         if (note && note.trim() !== "") {
             footerBox.push({ type: "separator", margin: "md", color: "#dddddd" });
@@ -785,8 +823,7 @@
             ]
         });
 
-        // 3. 核心邏輯：切割陣列，製作輪播卡片 (Carousel)
-        const ITEMS_PER_BUBBLE = 10; // 每 10 個餐點切成一張卡片
+        const ITEMS_PER_BUBBLE = 10; 
         let bubbles = [];
 
         for (let i = 0; i < allItemBoxes.length; i += ITEMS_PER_BUBBLE) {
@@ -799,7 +836,6 @@
                 { type: "box", layout: "vertical", margin: "md", contents: chunk }
             ];
 
-            // 只有最後一張卡片才加入「備註」與「總計」
             if (isLastBubble) {
                 bubbleContents.push(...footerBox);
             }
@@ -814,7 +850,6 @@
             });
         }
 
-        // 4. 發送 Carousel 格式的 Flex Message
         const flexMessage = {
             type: "flex",
             altText: `🎉 收到新訂單！總計 $${total}`,
@@ -824,7 +859,6 @@
             }
         };
 
-        // 呼叫 LIFF 傳送
         liff.sendMessages([flexMessage])
         .then(() => {
             alert("訂單已成功傳送！");
