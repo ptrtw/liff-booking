@@ -154,17 +154,6 @@
             padding: 1px 6px;
             border-radius: 4px;
         }
-        .pos-item-card .item-tag {
-            position: absolute;
-            top: 6px;
-            right: 6px;
-            font-size: 0.55rem;
-            background: var(--brand-light);
-            color: var(--brand-color);
-            padding: 1px 6px;
-            border-radius: 10px;
-            font-weight: 700;
-        }
 
         /* ===== 底部購物車 ===== */
         #cart-bar-btn {
@@ -628,6 +617,7 @@
     }
     loadSavedConfig();
 
+    // ===== 修改重點：自動登入與權限處理 =====
     function loadCloudConfig() {
         fetch(GAS_API_URL).then(r => r.json()).then(data => {
             if (data && data.menu && data.menu.length > 0) {
@@ -640,7 +630,20 @@
             }
         }).catch(err => console.error("無法連線雲端", err));
     }
-    liff.init({ liffId: LIFF_ID }).then(() => loadCloudConfig()).catch(() => loadCloudConfig());
+
+    liff.init({ liffId: LIFF_ID }).then(() => {
+        // 檢查是否已登入，若無則自動導向登入
+        if (!liff.isLoggedIn()) {
+            // 登入後會重新載入頁面，所以這裡不需額外動作
+            liff.login();
+        } else {
+            // 已登入，載入資料
+            loadCloudConfig();
+        }
+    }).catch(() => {
+        // 若無法初始化，可能是非 LINE 環境，但仍嘗試載入
+        loadCloudConfig();
+    });
 
     // 儲存
     function saveAllToLocal() {
@@ -872,8 +875,22 @@
         if (option !== 'uniform') document.getElementById('invoice-number').value = '';
     }
 
-    // ===== 結帳 =====
-    function sendToLine() {
+    // ===== 修改重點：送出訂單（加入登入檢查與錯誤處理） =====
+    async function sendToLine() {
+        // 檢查是否在 LINE 環境
+        if (!liff.isInClient()) {
+            alert("請在 LINE 聊天室內開啟此頁面，否則無法送出訂單。");
+            return;
+        }
+
+        // 檢查登入狀態，若未登入則自動登入
+        if (!liff.isLoggedIn()) {
+            alert("尚未登入 LINE，即將跳轉至登入頁面，請完成授權後再試。");
+            liff.login();
+            return;
+        }
+
+        // 其他業務檢查
         if (isStoreCurrentlyClosed) {
             alert("目前非營業時間，暫不開放結帳");
             return;
@@ -892,14 +909,12 @@
         let method = methodEl ? methodEl.value : "自取";
         let address = method === "外送" ? document.getElementById('customer-address').value.trim() : "";
 
-        if (!liff.isInClient()) return alert("請在 LINE 聊天室內開啟");
-
         let total = cart.reduce((sum, i) => sum + i.price, 0);
 
         let invoiceText = '';
         if (invoiceOption === 'paper') invoiceText = '🧾 紙本發票';
         else if (invoiceOption === 'uniform') invoiceText = `🏢 統編：${invoiceNumber}`;
-        else if (invoiceOption === 'carrier') invoiceText = '📱 載具（請上傳圖片）';
+        else if (invoiceOption === 'carrier') invoiceText = '📱 載具（請於聊天室上傳圖片）';
 
         let allItemBoxes = cart.map(i => {
             let details = `👉 ${i.ice} / ${i.sugar}`;
@@ -966,11 +981,13 @@
             });
         }
 
-        liff.sendMessages([{
-            type: "flex",
-            altText: `🧋 新訂單！總計 $${total}`,
-            contents: { type: "carousel", contents: bubbles }
-        }]).then(() => {
+        try {
+            await liff.sendMessages([{
+                type: "flex",
+                altText: `🧋 新訂單！總計 $${total}`,
+                contents: { type: "carousel", contents: bubbles }
+            }]);
+            // 成功
             let msg = "✅ 訂單已送出！";
             if (invoiceOption === 'carrier') msg += "\n\n📌 請在聊天室上傳載具 QR Code 圖片";
             alert(msg);
@@ -984,9 +1001,18 @@
             document.getElementById('invoice-number').value = '';
             document.getElementById('cart-modal').style.display = 'none';
             liff.closeWindow();
-        }).catch(err => {
-            alert('傳送失敗：' + JSON.stringify(err));
-        });
+        } catch (err) {
+            // 錯誤處理
+            let errorMsg = "傳送失敗：";
+            if (err.code === "UNAUTHORIZED") {
+                errorMsg += "權限不足，請確認您已登入 LINE 並已授權此應用。\n\n";
+                errorMsg += "若仍無法解決，請至 LINE Developers 後台檢查 LIFF 應用是否已開啟「發送訊息」權限。";
+            } else {
+                errorMsg += JSON.stringify(err);
+            }
+            alert(errorMsg);
+            console.error(err);
+        }
     }
 
     // 初始化
